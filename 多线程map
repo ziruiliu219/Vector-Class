@@ -1,0 +1,105 @@
+using namespace std;
+
+template <typename KeyType, typename ValueType>
+class ThreadSafeHashMap {
+private:
+    // 每个桶使用 vector 存储键值对
+    struct Bucket {
+        vector<pair<KeyType, ValueType>> data;
+        mutex bucket_mutex;  // 每个桶的互斥锁
+    };
+
+    size_t num_buckets;
+    vector<Bucket> buckets;
+
+    // 哈希函数
+    size_t hash(const KeyType& key) const {
+        return hash<KeyType>{}(key) % num_buckets;
+    }
+
+public:
+    // 构造函数
+    ThreadSafeHashMap(size_t size = 16) : num_buckets(size), buckets(size) {}
+
+    // 插入或更新键值对
+    void insert(const KeyType& key, const ValueType& value) {
+        size_t bucket_index = hash(key);
+        lock_guard<mutex> lock(buckets[bucket_index].bucket_mutex);
+
+        // 检查是否已经存在该键，如果存在则更新值
+        auto& bucket = buckets[bucket_index].data;
+        for (auto& pair : bucket) {
+            if (pair.first == key) {
+                pair.second = value;  // 更新值
+                return;
+            }
+        }
+        // 如果不存在，则插入新的键值对
+        bucket.emplace_back(key, value);
+    }
+
+    // 查找值
+    optional<ValueType> get(const KeyType& key) {
+        size_t bucket_index = hash(key);
+        lock_guard<mutex> lock(buckets[bucket_index].bucket_mutex);
+
+        const auto& bucket = buckets[bucket_index].data;
+        for (const auto& pair : bucket) {
+            if (pair.first == key) {
+                return pair.second;  // 找到并返回值
+            }
+        }
+        return nullopt;  // 返回空值，表示未找到
+    }
+
+    // 删除键值对
+    bool remove(const KeyType& key) {
+        size_t bucket_index = hash(key);
+        lock_guard<mutex> lock(buckets[bucket_index].bucket_mutex);
+
+        auto& bucket = buckets[bucket_index].data;
+        for (auto it = bucket.begin(); it != bucket.end(); ++it) {
+            if (it->first == key) {
+                bucket.erase(it);  // 删除键值对
+                return true;
+            }
+        }
+        return false;  // 未找到该键
+    }
+
+    // 打印哈希表
+    void print() {
+        for (size_t i = 0; i < num_buckets; ++i) {
+            lock_guard<mutex> lock(buckets[i].bucket_mutex);
+            cout << "Bucket " << i << ": ";
+            for (const auto& pair : buckets[i].data) {
+                cout << "(" << pair.first << ", " << pair.second << ") ";
+            }
+            cout << endl;
+        }
+    }
+};
+
+int main() {
+    ThreadSafeHashMap<string, int> map;
+
+    // 插入元素
+    map.insert("apple", 10);
+    map.insert("banana", 20);
+    map.insert("orange", 30);
+
+    // 获取元素
+    if (auto value = map.get("banana")) {
+        cout << "banana: " << *value << endl;
+    }
+
+    // 删除元素
+    map.remove("apple");
+
+    // 打印哈希表内容
+    map.print();
+
+    return 0;
+}
+
+
